@@ -4,7 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -39,12 +41,16 @@ public class PongGame extends SurfaceView implements Runnable {
         mFontMargin = mScreenX / 75;
         mOurHolder = getHolder();
         mPaint = new Paint();
+        mBall = new Ball(mScreenX);
+        mBat = new Bat(mScreenX, mScreenY);
+
         startNewGame();
     }
 
     private void startNewGame() {
         mScore = 0;
         mLives = 3;
+        mBall.reset(mScreenX, mScreenY);
 
     }
 
@@ -54,8 +60,11 @@ public class PongGame extends SurfaceView implements Runnable {
             mCanvas.drawColor(Color.argb(255, 26, 128, 182));
             mPaint.setColor(Color.argb(255, 255, 255, 255));
             mPaint.setTextSize(mFontSize);
-            mCanvas.drawText("Score: " + mScore + " Lives: " + mLives,
 
+            mCanvas.drawRect(mBall.getRect(), mPaint);
+            mCanvas.drawRect(mBat.getRect(), mPaint);
+
+            mCanvas.drawText("Score: " + mScore + " Lives: " + mLives,
                     mFontMargin, mFontSize, mPaint);
 
             if (DEBUGGING) {
@@ -70,7 +79,6 @@ public class PongGame extends SurfaceView implements Runnable {
         int debugStart = 150;
         mPaint.setTextSize(debugSize);
         mCanvas.drawText("FPS: " + mFPS,
-
                 10, debugStart + debugSize, mPaint);
     }
 
@@ -82,47 +90,86 @@ public class PongGame extends SurfaceView implements Runnable {
                 update(); // update new positions
                 detectCollisions(); // detect collisions
             }
-//draw the scene
+
             draw();
-// How long did this frame/loop take?
+
             long timeThisFrame = System.currentTimeMillis() - frameStartTime;
-// check timeThisFrame > 0 ms because dividing by 0 will crashes game
             if (timeThisFrame > 0) {
-// Store frame rate to pass to the update methods of mBat and mBall
                 mFPS = MILLIS_IN_SECOND / timeThisFrame;
             }
         }
     }
 
     private void update() {
+        mBall.update(mFPS);
+        mBat.update(mFPS);
     }
 
     private void detectCollisions() {
+        if(RectF.intersects(mBat.getRect(), mBall.getRect())) {
+            mBall.batBounce(mBat.getRect());
+            mBall.increaseVelocity();
+            mScore++;
+        }
+
+        if(mBall.getRect().bottom > mScreenY){
+            mBall.reverseYVelocity();
+            mLives--;
+            if(mLives == 0){
+                mPaused = true;
+                startNewGame();
+            }
+        }
+// Top
+        if(mBall.getRect().top < 0){
+            mBall.reverseYVelocity();
+        }
+// Left
+        if(mBall.getRect().left < 0){
+            mBall.reverseXVelocity();
+        }
+// Right
+        if(mBall.getRect().right > mScreenX){
+            mBall.reverseXVelocity();
+        }
     }
 
 
     public void pause() {
-
-// Set mPlaying to false. Stopping the thread isn’t always instant
         mPlaying = false;
         try {
-
             mGameThread.join();
-
         } catch (InterruptedException e) {
-
             Log.e("Error:", "joining thread");
-
         }
 
     }
 
     public void resume() {
         mPlaying = true;
-// Initialize the instance of Thread
         mGameThread = new Thread(this);
-// Start the thread
         mGameThread.start();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent motionEvent) {
+        switch (motionEvent.getAction() &
+                MotionEvent.ACTION_MASK) {
+            case MotionEvent.ACTION_DOWN:
+                mPaused = false;
+                if (motionEvent.getX() > mScreenX / 2){
+                    mBat.setMovementState(mBat.RIGHT);
+                }
+                else {
+                    mBat.setMovementState(mBat.LEFT);
+                }
+                break;
+
+            case MotionEvent.ACTION_UP:
+                mBat.setMovementState(mBat.STOPPED);
+                break;
+        }
+        return true;
     }
 }
 
